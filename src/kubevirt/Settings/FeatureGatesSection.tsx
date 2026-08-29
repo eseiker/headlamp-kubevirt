@@ -28,14 +28,20 @@ export interface FeatureGateInfo {
   versionHistory: Record<string, FeatureGateState>;
 }
 
+export function parseKubeVirtVersion(version: string | null | undefined): [number, number] | null {
+  const match = version?.match(/^v?(\d+)\.(\d+)(?:\.|$)/);
+  if (!match) return null;
+  return [Number(match[1]), Number(match[2])];
+}
+
 // Get feature gate state for a specific version
 export function getGateStateForVersion(
   gate: FeatureGateInfo,
-  version: string
+  version: string | null | undefined
 ): FeatureGateState | null {
-  const versionParts = version.split('.').map(Number);
-  const major = versionParts[0] || 1;
-  const minor = versionParts[1] || 0;
+  const parsedVersion = parseKubeVirtVersion(version);
+  if (!parsedVersion) return null;
+  const [major, minor] = parsedVersion;
 
   let currentState: FeatureGateState | null = null;
 
@@ -59,7 +65,7 @@ export function getGateStateForVersion(
 // Match KubeVirt's precedence: GA > explicit enable > explicit disable > Beta > off.
 export function isFeatureGateEnabledForVersion(
   gate: FeatureGateInfo,
-  version: string,
+  version: string | null | undefined,
   enabledFeatureGates: readonly string[],
   disabledFeatureGates: readonly string[]
 ): boolean {
@@ -90,7 +96,10 @@ export function updateFeatureGateLists(
 }
 
 // Check if gate is available in version (hide Discontinued gates)
-function isGateAvailableInVersion(gate: FeatureGateInfo, version: string): boolean {
+function isGateAvailableInVersion(
+  gate: FeatureGateInfo,
+  version: string | null | undefined
+): boolean {
   const state = getGateStateForVersion(gate, version);
   return state !== null && state !== 'Discontinued';
 }
@@ -633,7 +642,8 @@ const FeatureGatesSection = React.memo(function FeatureGatesSection(
   } = props;
 
   // Compute GA and Deprecated gates dynamically from version
-  const kvVersion = kubeVirt?.getVersion() || '1.7.0';
+  const kvVersion = kubeVirt?.getVersion();
+  const versionKnown = parseKubeVirtVersion(kvVersion) !== null;
   const { GA_GATES, DEPRECATED_GATES } = useMemo(() => {
     const allGates = Object.values(FEATURE_GATE_CATEGORIES).flatMap(cat => cat.gates);
     return {
@@ -690,6 +700,12 @@ const FeatureGatesSection = React.memo(function FeatureGatesSection(
           Feature gates enable experimental or optional features. Changes require KubeVirt pods to
           restart.
         </Alert>
+
+        {!versionKnown && (
+          <Alert severity="warning" sx={{ mb: 3 }}>
+            KubeVirt version is unavailable. Version-dependent feature gates cannot be shown safely.
+          </Alert>
+        )}
 
         <Box display="flex" gap={3}>
           {/* Floating sidebar navigation */}

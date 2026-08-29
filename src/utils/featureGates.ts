@@ -13,7 +13,7 @@ const KNOWN_FEATURE_GATES = new Map(
 // Global state for feature gates
 let featureGates: string[] = [];
 let disabledFeatureGates: string[] = [];
-let kubeVirtVersion = '1.7.0';
+let kubeVirtVersion: string | null = null;
 let featureGatesLoaded = false;
 let listeners: Array<() => void> = [];
 let retryTimeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -36,7 +36,10 @@ export async function loadFeatureGates() {
       const developerConfiguration = kubeVirt?.spec?.configuration?.developerConfiguration;
       featureGates = developerConfiguration?.featureGates || [];
       disabledFeatureGates = developerConfiguration?.disabledFeatureGates || [];
-      kubeVirtVersion = kubeVirt?.status?.observedKubeVirtVersion || '1.7.0';
+      kubeVirtVersion =
+        kubeVirt?.status?.observedKubeVirtVersion ||
+        kubeVirt?.status?.targetKubeVirtVersion ||
+        null;
     }
     featureGatesLoaded = true;
     retryCount = 0;
@@ -102,7 +105,7 @@ export function subscribeToFeatureGates(listener: () => void): () => void {
 export function updateFeatureGates(
   gates: string[],
   disabledGates: string[] = disabledFeatureGates,
-  version: string = kubeVirtVersion
+  version: string | null = kubeVirtVersion
 ) {
   featureGates = gates;
   disabledFeatureGates = disabledGates;

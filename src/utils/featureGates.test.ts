@@ -9,7 +9,7 @@ vi.mock('@kinvolk/headlamp-plugin/lib/components/common', () => ({
 }));
 
 describe('isFeatureGateEnabled', () => {
-  afterEach(() => updateFeatureGates([], [], '1.7.0'));
+  afterEach(() => updateFeatureGates([], [], null));
 
   it('uses version-specific default states', () => {
     updateFeatureGates([], [], '1.9.0');
@@ -33,5 +33,13 @@ describe('isFeatureGateEnabled', () => {
 
     updateFeatureGates(['CustomGate'], [], '1.9.0');
     expect(isFeatureGateEnabled('CustomGate')).toBe(true);
+  });
+
+  it('does not infer default states without a version', () => {
+    updateFeatureGates([], [], null);
+    expect(isFeatureGateEnabled('Snapshot')).toBe(false);
+
+    updateFeatureGates(['Snapshot'], [], null);
+    expect(isFeatureGateEnabled('Snapshot')).toBe(true);
   });
 });

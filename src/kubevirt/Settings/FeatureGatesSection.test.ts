@@ -3,6 +3,7 @@ import {
   FEATURE_GATE_CATEGORIES,
   getGateStateForVersion,
   isFeatureGateEnabledForVersion,
+  parseKubeVirtVersion,
   updateFeatureGateLists,
 } from './FeatureGatesSection';
 
@@ -60,6 +61,22 @@ describe('KubeVirt 1.9 feature gates', () => {
 
   it('keeps the ExpandDisks GA transition introduced in 1.8', () => {
     expect(getGateStateForVersion(getGate('ExpandDisks'), '1.8.0')).toBe('GA');
+  });
+
+  it('accepts the v-prefixed version reported by KubeVirt', () => {
+    expect(getGateStateForVersion(getGate('VMExport'), 'v1.9.0')).toBe('GA');
+  });
+});
+
+describe('KubeVirt version parsing', () => {
+  it('accepts release and prerelease versions', () => {
+    expect(parseKubeVirtVersion('v1.9.0')).toEqual([1, 9]);
+    expect(parseKubeVirtVersion('1.9.0-rc.1')).toEqual([1, 9]);
+  });
+
+  it('does not invent a version for unavailable values', () => {
+    expect(parseKubeVirtVersion('Unknown')).toBeNull();
+    expect(parseKubeVirtVersion(undefined)).toBeNull();
   });
 });
 

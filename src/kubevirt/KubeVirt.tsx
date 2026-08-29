@@ -17,7 +17,7 @@ class KubeVirt extends KubeObject {
   }
 
   getVersion(): string {
-    return this.status?.observedKubeVirtVersion || 'Unknown';
+    return this.status?.observedKubeVirtVersion || this.status?.targetKubeVirtVersion || 'Unknown';
   }
 
   getFeatureGates(): string[] {
