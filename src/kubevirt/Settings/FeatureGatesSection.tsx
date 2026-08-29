@@ -56,6 +56,39 @@ export function getGateStateForVersion(
   return currentState;
 }
 
+// Match KubeVirt's precedence: GA > explicit enable > explicit disable > Beta > off.
+export function isFeatureGateEnabledForVersion(
+  gate: FeatureGateInfo,
+  version: string,
+  enabledFeatureGates: readonly string[],
+  disabledFeatureGates: readonly string[]
+): boolean {
+  const state = getGateStateForVersion(gate, version);
+  if (state === 'GA') return true;
+  if (enabledFeatureGates.includes(gate.name)) return true;
+  if (disabledFeatureGates.includes(gate.name)) return false;
+  return state === 'Beta';
+}
+
+export function updateFeatureGateLists(
+  gate: string,
+  state: FeatureGateState | null,
+  enabled: boolean,
+  enabledFeatureGates: readonly string[],
+  disabledFeatureGates: readonly string[]
+): { enabledFeatureGates: string[]; disabledFeatureGates: string[] } {
+  let nextEnabled = enabledFeatureGates.filter(featureGate => featureGate !== gate);
+  let nextDisabled = disabledFeatureGates.filter(featureGate => featureGate !== gate);
+
+  if (enabled && state !== 'Beta') {
+    nextEnabled = [...nextEnabled, gate];
+  } else if (!enabled && state === 'Beta') {
+    nextDisabled = [...nextDisabled, gate];
+  }
+
+  return { enabledFeatureGates: nextEnabled, disabledFeatureGates: nextDisabled };
+}
+
 // Check if gate is available in version (hide Discontinued gates)
 function isGateAvailableInVersion(gate: FeatureGateInfo, version: string): boolean {
   const state = getGateStateForVersion(gate, version);
@@ -574,9 +607,13 @@ interface FeatureGatesSectionProps {
     getVersion(): string;
   } | null;
   enabledFeatureGates: string[];
+  disabledFeatureGates: string[];
   sidebarReloadWarnings: string[];
   updating: boolean;
-  onToggleFeatureGate: (gate: string, enabled: boolean) => Promise<void>;
+  onUpdateFeatureGates: (
+    enabledFeatureGates: string[],
+    disabledFeatureGates: string[]
+  ) => Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -586,8 +623,14 @@ interface FeatureGatesSectionProps {
 const FeatureGatesSection = React.memo(function FeatureGatesSection(
   props: FeatureGatesSectionProps
 ) {
-  const { kubeVirt, enabledFeatureGates, sidebarReloadWarnings, updating, onToggleFeatureGate } =
-    props;
+  const {
+    kubeVirt,
+    enabledFeatureGates,
+    disabledFeatureGates,
+    sidebarReloadWarnings,
+    updating,
+    onUpdateFeatureGates,
+  } = props;
 
   // Compute GA and Deprecated gates dynamically from version
   const kvVersion = kubeVirt?.getVersion() || '1.7.0';
@@ -625,8 +668,19 @@ const FeatureGatesSection = React.memo(function FeatureGatesSection(
   }, []);
 
   // Local handlers
-  const handleFeatureGateToggle = (gate: string, enabled: boolean) => {
-    onToggleFeatureGate(gate, enabled);
+  const handleFeatureGateToggle = (
+    gate: string,
+    state: FeatureGateState | null,
+    enabled: boolean
+  ) => {
+    const updated = updateFeatureGateLists(
+      gate,
+      state,
+      enabled,
+      enabledFeatureGates,
+      disabledFeatureGates
+    );
+    onUpdateFeatureGates(updated.enabledFeatureGates, updated.disabledFeatureGates);
   };
 
   return (
@@ -839,7 +893,17 @@ const FeatureGatesSection = React.memo(function FeatureGatesSection(
                   {availableGates.map(({ name, description, currentState }) => {
                     const isGA = GA_GATES.has(name);
                     const isDeprecated = DEPRECATED_GATES.has(name);
-                    const isEnabled = isGA || enabledFeatureGates.includes(name);
+                    const gate = gates.find(candidate => candidate.name === name)!;
+                    const isEnabled = isFeatureGateEnabledForVersion(
+                      gate,
+                      kvVersion,
+                      enabledFeatureGates,
+                      disabledFeatureGates
+                    );
+                    const isEnabledByDefault =
+                      currentState === 'Beta' &&
+                      !enabledFeatureGates.includes(name) &&
+                      !disabledFeatureGates.includes(name);
 
                     return (
                       <Box key={name}>
@@ -884,7 +948,12 @@ const FeatureGatesSection = React.memo(function FeatureGatesSection(
                                 onChange={
                                   isGA
                                     ? undefined
-                                    : e => handleFeatureGateToggle(name, e.target.checked)
+                                    : e =>
+                                        handleFeatureGateToggle(
+                                          name,
+                                          currentState,
+                                          e.target.checked
+                                        )
                                 }
                                 disabled={isGA || updating}
                                 color={isDeprecated ? 'warning' : undefined}
@@ -910,7 +979,13 @@ const FeatureGatesSection = React.memo(function FeatureGatesSection(
                                   minWidth: 70,
                                 }}
                               >
-                                {isGA ? 'Always On' : isEnabled ? 'Enabled' : 'Disabled'}
+                                {isGA
+                                  ? 'Always On'
+                                  : isEnabledByDefault
+                                  ? 'Enabled (default)'
+                                  : isEnabled
+                                  ? 'Enabled'
+                                  : 'Disabled'}
                               </Typography>
                             }
                           />
@@ -971,7 +1046,9 @@ const FeatureGatesSection = React.memo(function FeatureGatesSection(
                           control={
                             <Switch
                               checked
-                              onChange={e => handleFeatureGateToggle(customFG, e.target.checked)}
+                              onChange={e =>
+                                handleFeatureGateToggle(customFG, null, e.target.checked)
+                              }
                               disabled={updating}
                               sx={{
                                 '& .MuiSwitch-switchBase.Mui-checked': {

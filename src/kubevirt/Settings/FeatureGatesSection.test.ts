@@ -1,5 +1,10 @@
-import { FEATURE_GATE_CATEGORIES, getGateStateForVersion } from './FeatureGatesSection';
 import type { FeatureGateInfo, FeatureGateState } from './FeatureGatesSection';
+import {
+  FEATURE_GATE_CATEGORIES,
+  getGateStateForVersion,
+  isFeatureGateEnabledForVersion,
+  updateFeatureGateLists,
+} from './FeatureGatesSection';
 
 vi.mock('@kinvolk/headlamp-plugin/lib/components/common', () => ({
   SectionBox: () => null,
@@ -55,5 +60,47 @@ describe('KubeVirt 1.9 feature gates', () => {
 
   it('keeps the ExpandDisks GA transition introduced in 1.8', () => {
     expect(getGateStateForVersion(getGate('ExpandDisks'), '1.8.0')).toBe('GA');
+  });
+});
+
+describe('feature gate enablement', () => {
+  const isEnabled = (name: string, enabled: string[] = [], disabled: string[] = []) =>
+    isFeatureGateEnabledForVersion(getGate(name), '1.9.0', enabled, disabled);
+
+  it('enables GA and Beta gates by default', () => {
+    expect(isEnabled('VMExport')).toBe(true);
+    expect(isEnabled('RebootPolicy')).toBe(true);
+  });
+
+  it('keeps Alpha and Deprecated gates disabled by default', () => {
+    expect(isEnabled('VMStatsCollector')).toBe(false);
+    expect(isEnabled('HotplugVolumes')).toBe(false);
+  });
+
+  it('uses KubeVirt precedence for explicit enable and disable lists', () => {
+    expect(isEnabled('RebootPolicy', [], ['RebootPolicy'])).toBe(false);
+    expect(isEnabled('RebootPolicy', ['RebootPolicy'], ['RebootPolicy'])).toBe(true);
+    expect(isEnabled('VMExport', [], ['VMExport'])).toBe(true);
+  });
+
+  it('writes Beta opt-outs to disabledFeatureGates', () => {
+    expect(updateFeatureGateLists('RebootPolicy', 'Beta', false, [], [])).toEqual({
+      enabledFeatureGates: [],
+      disabledFeatureGates: ['RebootPolicy'],
+    });
+  });
+
+  it('removes Beta opt-outs when restoring the default', () => {
+    expect(updateFeatureGateLists('RebootPolicy', 'Beta', true, [], ['RebootPolicy'])).toEqual({
+      enabledFeatureGates: [],
+      disabledFeatureGates: [],
+    });
+  });
+
+  it('continues to store Alpha opt-ins in featureGates', () => {
+    expect(updateFeatureGateLists('VMStatsCollector', 'Alpha', true, [], [])).toEqual({
+      enabledFeatureGates: ['VMStatsCollector'],
+      disabledFeatureGates: [],
+    });
   });
 });
