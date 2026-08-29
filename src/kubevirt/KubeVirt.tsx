@@ -20,6 +20,14 @@ class KubeVirt extends KubeObject {
     return this.status?.observedKubeVirtVersion || this.status?.targetKubeVirtVersion || 'Unknown';
   }
 
+  getDefaultArchitecture(): string {
+    return (
+      this.status?.defaultArchitecture ||
+      this.spec?.configuration?.architectureConfiguration?.defaultArchitecture ||
+      ''
+    );
+  }
+
   getFeatureGates(): string[] {
     return this.spec?.configuration?.developerConfiguration?.featureGates || [];
   }
