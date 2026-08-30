@@ -54,8 +54,8 @@ import VirtualMachineClusterInstanceType from '../InstanceTypes/VirtualMachineCl
 import NetworkAttachmentDefinition from '../NetworkAttachmentDefinitions/NetworkAttachmentDefinition';
 import type { VMArchitecture } from './vmArchitecture';
 import {
-  CPU_MODEL_GROUPS,
   DEFAULT_VM_ARCHITECTURE,
+  getCPUModelsForArchitecture,
   isCPUModelCompatible,
   isMachineTypeCompatible,
   MACHINE_TYPE_OPTIONS,
@@ -656,7 +656,6 @@ export default function VMFormFull({
       (f: KubeResourceBuilder) => f.name === 'vmx' || f.name === 'svm'
     ) || false;
   const machineType = resource.spec?.template?.spec?.domain?.machine?.type || '';
-  const cpuModelGroups = CPU_MODEL_GROUPS[architecture];
   const machineTypeOptions = MACHINE_TYPE_OPTIONS[architecture];
   const enableAcpi = resource.spec?.template?.spec?.domain?.features?.acpi?.enabled !== false;
   const enableTPM = !!resource.spec?.template?.spec?.domain?.devices?.tpm;
@@ -755,6 +754,14 @@ export default function VMFormFull({
   const [volumeSnapshots, setVolumeSnapshots] = useState<string[]>([]);
   const [dataVolumes, setDataVolumes] = useState<string[]>([]);
   const [nodeLabels, setNodeLabels] = useState<string[]>([]); // Available node label keys
+  const [cpuModelsByArchitecture, setCpuModelsByArchitecture] = useState<
+    Record<VMArchitecture, string[]>
+  >({ amd64: [], arm64: [], s390x: [] });
+  const [cpuModelsLoading, setCpuModelsLoading] = useState(true);
+  const [cpuModelsError, setCpuModelsError] = useState(false);
+  const availableCpuModels = cpuModelsByArchitecture[architecture];
+  const currentCpuModelUnavailable =
+    !!cpuModel && !isCPUModelCompatible(cpuModel, architecture, availableCpuModels);
 
   // Fetch permitted host devices from KubeVirt CR for device passthrough
   const permittedPciDevices = kvConfig?.getPciHostDevices() || [];
@@ -953,10 +960,19 @@ export default function VMFormFull({
             }
           });
           setNodeLabels(Array.from(labelKeysSet).sort());
+          setCpuModelsByArchitecture({
+            amd64: getCPUModelsForArchitecture(nodes, 'amd64'),
+            arm64: getCPUModelsForArchitecture(nodes, 'arm64'),
+            s390x: getCPUModelsForArchitecture(nodes, 's390x'),
+          });
+          setCpuModelsLoading(false);
         }
       )
       .catch(err => {
-        if (!cancelled) console.error('Failed to fetch nodes:', err);
+        if (cancelled) return;
+        console.error('Failed to fetch nodes:', err);
+        setCpuModelsError(true);
+        setCpuModelsLoading(false);
       });
     return () => {
       cancelled = true;
@@ -2167,7 +2183,11 @@ export default function VMFormFull({
         ...currentDomain,
         cpu: {
           ...currentCpu,
-          model: isCPUModelCompatible(currentCpuModel, nextArchitecture)
+          model: isCPUModelCompatible(
+            currentCpuModel,
+            nextArchitecture,
+            cpuModelsByArchitecture[nextArchitecture]
+          )
             ? currentCpu.model
             : undefined,
           features: remainingCpuFeatures?.length ? remainingCpuFeatures : undefined,
@@ -5168,17 +5188,27 @@ export default function VMFormFull({
                     host-passthrough (Direct passthrough)
                   </MenuItem>
                   <MenuItem value="host-model">host-model (Host-like model)</MenuItem>
-                  {cpuModelGroups.map(group => (
-                    <React.Fragment key={group.label}>
-                      <MenuItem disabled>───── {group.label} ─────</MenuItem>
-                      {group.models.map(model => (
-                        <MenuItem key={model.value} value={model.value}>
-                          {model.label}
-                        </MenuItem>
-                      ))}
-                    </React.Fragment>
+                  {currentCpuModelUnavailable && (
+                    <MenuItem value={cpuModel}>{cpuModel} (currently configured)</MenuItem>
+                  )}
+                  {availableCpuModels.length > 0 && (
+                    <MenuItem disabled>───── Available on {architecture} nodes ─────</MenuItem>
+                  )}
+                  {availableCpuModels.map(model => (
+                    <MenuItem key={model} value={model}>
+                      {model}
+                    </MenuItem>
                   ))}
                 </Select>
+                <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
+                  {cpuModelsLoading
+                    ? 'Loading named CPU models from cluster nodes…'
+                    : cpuModelsError
+                    ? 'Named CPU models could not be loaded from cluster nodes.'
+                    : availableCpuModels.length === 0
+                    ? `No named CPU models are advertised by ${architecture} nodes.`
+                    : 'Named CPU models are loaded from matching cluster nodes.'}
+                </Typography>
               </FormControl>
             )}
 

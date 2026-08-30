@@ -8,59 +8,34 @@ export const VM_ARCHITECTURES: Array<{ value: VMArchitecture; label: string }> =
   { value: 's390x', label: 'IBM Z (s390x)' },
 ];
 
-export interface CPUModelGroup {
-  label: string;
-  models: Array<{ value: string; label: string }>;
+const CPU_MODEL_LABEL_PREFIX = 'cpu-model.node.kubevirt.io/';
+
+interface NodeWithLabels {
+  metadata?: {
+    labels?: Record<string, string>;
+  };
 }
 
-export const CPU_MODEL_GROUPS: Record<VMArchitecture, CPUModelGroup[]> = {
-  amd64: [
-    {
-      label: 'Intel x86_64',
-      models: [
-        { value: 'Conroe', label: 'Conroe' },
-        { value: 'Penryn', label: 'Penryn' },
-        { value: 'Nehalem', label: 'Nehalem' },
-        { value: 'Westmere', label: 'Westmere' },
-        { value: 'SandyBridge', label: 'SandyBridge' },
-        { value: 'IvyBridge', label: 'IvyBridge' },
-        { value: 'Haswell', label: 'Haswell' },
-        { value: 'Broadwell', label: 'Broadwell' },
-        { value: 'Skylake-Client', label: 'Skylake-Client' },
-        { value: 'Skylake-Server', label: 'Skylake-Server' },
-        { value: 'Cascadelake-Server', label: 'Cascadelake-Server' },
-        { value: 'Cooperlake', label: 'Cooperlake' },
-        { value: 'Icelake-Server', label: 'Icelake-Server' },
-        { value: 'Sapphirerapids', label: 'Sapphirerapids' },
-      ],
-    },
-    {
-      label: 'AMD x86_64',
-      models: [
-        { value: 'Opteron_G1', label: 'Opteron G1' },
-        { value: 'Opteron_G2', label: 'Opteron G2' },
-        { value: 'Opteron_G3', label: 'Opteron G3' },
-        { value: 'Opteron_G4', label: 'Opteron G4' },
-        { value: 'Opteron_G5', label: 'Opteron G5' },
-        { value: 'EPYC', label: 'EPYC' },
-        { value: 'EPYC-Rome', label: 'EPYC-Rome' },
-        { value: 'EPYC-Milan', label: 'EPYC-Milan' },
-        { value: 'EPYC-Genoa', label: 'EPYC-Genoa' },
-      ],
-    },
-  ],
-  arm64: [],
-  s390x: [
-    {
-      label: 'IBM Z',
-      models: [
-        { value: 'z13', label: 'z13' },
-        { value: 'z14', label: 'z14' },
-        { value: 'z15', label: 'z15' },
-      ],
-    },
-  ],
-};
+export function getCPUModelsForArchitecture(
+  nodes: NodeWithLabels[],
+  architecture: VMArchitecture
+): string[] {
+  const models = new Set<string>();
+
+  nodes.forEach(node => {
+    const labels = node.metadata?.labels;
+    if (labels?.['kubernetes.io/arch'] !== architecture) return;
+
+    Object.entries(labels).forEach(([key, value]) => {
+      if (value !== 'true' || !key.startsWith(CPU_MODEL_LABEL_PREFIX)) return;
+
+      const model = key.slice(CPU_MODEL_LABEL_PREFIX.length);
+      if (model) models.add(model);
+    });
+  });
+
+  return Array.from(models).sort((a, b) => a.localeCompare(b));
+}
 
 export const MACHINE_TYPE_OPTIONS: Record<
   VMArchitecture,
@@ -91,17 +66,16 @@ export function supportsCPUModelSelection(architecture: VMArchitecture): boolean
   return !HOST_PASSTHROUGH_ONLY_ARCHITECTURES.has(architecture);
 }
 
-export function isCPUModelCompatible(model: string, architecture: VMArchitecture): boolean {
+export function isCPUModelCompatible(
+  model: string,
+  architecture: VMArchitecture,
+  availableModels: readonly string[] = []
+): boolean {
   if (!supportsCPUModelSelection(architecture)) {
     return model === '' || model === 'host-passthrough';
   }
 
-  return (
-    ARCHITECTURE_INDEPENDENT_CPU_MODELS.has(model) ||
-    CPU_MODEL_GROUPS[architecture].some(group =>
-      group.models.some(candidate => candidate.value === model)
-    )
-  );
+  return ARCHITECTURE_INDEPENDENT_CPU_MODELS.has(model) || availableModels.includes(model);
 }
 
 export function isMachineTypeCompatible(type: string, architecture: VMArchitecture): boolean {
