@@ -1,11 +1,10 @@
-export type VMArchitecture = 'amd64' | 'arm64' | 'ppc64le' | 's390x';
+export type VMArchitecture = 'amd64' | 'arm64' | 's390x';
 
 export const DEFAULT_VM_ARCHITECTURE: VMArchitecture = 'amd64';
 
 export const VM_ARCHITECTURES: Array<{ value: VMArchitecture; label: string }> = [
   { value: 'amd64', label: 'x86_64 (amd64)' },
   { value: 'arm64', label: 'ARM64 (arm64)' },
-  { value: 'ppc64le', label: 'IBM Power (ppc64le)' },
   { value: 's390x', label: 'IBM Z (s390x)' },
 ];
 
@@ -50,27 +49,7 @@ export const CPU_MODEL_GROUPS: Record<VMArchitecture, CPUModelGroup[]> = {
       ],
     },
   ],
-  arm64: [
-    {
-      label: 'ARM64',
-      models: [
-        { value: 'cortex-a53', label: 'Cortex-A53' },
-        { value: 'cortex-a57', label: 'Cortex-A57' },
-        { value: 'cortex-a72', label: 'Cortex-A72' },
-        { value: 'max', label: 'ARM Max (latest features)' },
-      ],
-    },
-  ],
-  ppc64le: [
-    {
-      label: 'IBM Power',
-      models: [
-        { value: 'POWER8', label: 'POWER8' },
-        { value: 'POWER9', label: 'POWER9' },
-        { value: 'POWER10', label: 'POWER10' },
-      ],
-    },
-  ],
+  arm64: [],
   s390x: [
     {
       label: 'IBM Z',
@@ -99,10 +78,6 @@ export const MACHINE_TYPE_OPTIONS: Record<
     { value: '', label: 'Default (virt)' },
     { value: 'virt', label: 'virt' },
   ],
-  ppc64le: [
-    { value: '', label: 'Default (pseries)' },
-    { value: 'pseries', label: 'pseries' },
-  ],
   s390x: [
     { value: '', label: 'Default (s390-ccw-virtio)' },
     { value: 's390-ccw-virtio', label: 's390-ccw-virtio' },
@@ -110,8 +85,17 @@ export const MACHINE_TYPE_OPTIONS: Record<
 };
 
 const ARCHITECTURE_INDEPENDENT_CPU_MODELS = new Set(['', 'host-passthrough', 'host-model']);
+const HOST_PASSTHROUGH_ONLY_ARCHITECTURES = new Set<VMArchitecture>(['arm64']);
+
+export function supportsCPUModelSelection(architecture: VMArchitecture): boolean {
+  return !HOST_PASSTHROUGH_ONLY_ARCHITECTURES.has(architecture);
+}
 
 export function isCPUModelCompatible(model: string, architecture: VMArchitecture): boolean {
+  if (!supportsCPUModelSelection(architecture)) {
+    return model === '' || model === 'host-passthrough';
+  }
+
   return (
     ARCHITECTURE_INDEPENDENT_CPU_MODELS.has(model) ||
     CPU_MODEL_GROUPS[architecture].some(group =>

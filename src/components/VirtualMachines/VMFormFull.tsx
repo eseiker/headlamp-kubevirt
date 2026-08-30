@@ -59,6 +59,7 @@ import {
   isCPUModelCompatible,
   isMachineTypeCompatible,
   MACHINE_TYPE_OPTIONS,
+  supportsCPUModelSelection,
   VM_ARCHITECTURES,
 } from './vmArchitecture';
 
@@ -5147,35 +5148,39 @@ export default function VMFormFull({
             )}
 
             {/* CPU Model */}
-            <FormControl fullWidth sx={{ mb: 2 }}>
-              <Typography
-                variant="caption"
-                color="text.secondary"
-                sx={{ mb: 0.5, display: 'block' }}
-              >
-                CPU Model (optional)
-              </Typography>
-              <Select
-                size="small"
-                value={cpuModel}
-                onChange={e => handleCpuModelChange(e.target.value)}
-                displayEmpty
-              >
-                <MenuItem value="">Default</MenuItem>
-                <MenuItem value="host-passthrough">host-passthrough (Direct passthrough)</MenuItem>
-                <MenuItem value="host-model">host-model (Host-like model)</MenuItem>
-                {cpuModelGroups.map(group => (
-                  <React.Fragment key={group.label}>
-                    <MenuItem disabled>───── {group.label} ─────</MenuItem>
-                    {group.models.map(model => (
-                      <MenuItem key={model.value} value={model.value}>
-                        {model.label}
-                      </MenuItem>
-                    ))}
-                  </React.Fragment>
-                ))}
-              </Select>
-            </FormControl>
+            {supportsCPUModelSelection(architecture) && (
+              <FormControl fullWidth sx={{ mb: 2 }}>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ mb: 0.5, display: 'block' }}
+                >
+                  CPU Model (optional)
+                </Typography>
+                <Select
+                  size="small"
+                  value={cpuModel}
+                  onChange={e => handleCpuModelChange(e.target.value)}
+                  displayEmpty
+                >
+                  <MenuItem value="">Default</MenuItem>
+                  <MenuItem value="host-passthrough">
+                    host-passthrough (Direct passthrough)
+                  </MenuItem>
+                  <MenuItem value="host-model">host-model (Host-like model)</MenuItem>
+                  {cpuModelGroups.map(group => (
+                    <React.Fragment key={group.label}>
+                      <MenuItem disabled>───── {group.label} ─────</MenuItem>
+                      {group.models.map(model => (
+                        <MenuItem key={model.value} value={model.value}>
+                          {model.label}
+                        </MenuItem>
+                      ))}
+                    </React.Fragment>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
 
             {/* Nested Virtualization */}
             {architecture === 'amd64' && (
