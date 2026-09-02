@@ -17,7 +17,7 @@ class KubeVirt extends KubeObject {
   }
 
   getVersion(): string {
-    return this.status?.observedKubeVirtVersion || 'Unknown';
+    return this.status?.observedKubeVirtVersion || this.status?.targetKubeVirtVersion || 'Unknown';
   }
 
   getDefaultArchitecture(): string {
@@ -30,6 +30,10 @@ class KubeVirt extends KubeObject {
 
   getFeatureGates(): string[] {
     return this.spec?.configuration?.developerConfiguration?.featureGates || [];
+  }
+
+  getDisabledFeatureGates(): string[] {
+    return this.spec?.configuration?.developerConfiguration?.disabledFeatureGates || [];
   }
 
   getPhase(): string {
@@ -100,7 +104,7 @@ class KubeVirt extends KubeObject {
     return this.update(updated);
   }
 
-  async updateFeatureGates(featureGates: string[]) {
+  async updateFeatureGates(featureGates: string[], disabledFeatureGates: string[]) {
     const updated = { ...this.jsonData };
     if (!updated.spec) updated.spec = {};
     if (!updated.spec.configuration) updated.spec.configuration = {};
@@ -108,6 +112,7 @@ class KubeVirt extends KubeObject {
       updated.spec.configuration.developerConfiguration = {};
     }
     updated.spec.configuration.developerConfiguration.featureGates = featureGates;
+    updated.spec.configuration.developerConfiguration.disabledFeatureGates = disabledFeatureGates;
     return this.update(updated);
   }
 
